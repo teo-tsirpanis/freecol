@@ -19,6 +19,9 @@
 
 package net.sf.freecol.common.option;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.util.HashMap;
 import java.util.logging.Logger;
 
 import javax.xml.stream.XMLStreamException;
@@ -40,6 +43,8 @@ public abstract class AbstractOption<T> extends FreeColSpecObject
     implements Option<T> {
 
     private static final Logger logger = Logger.getLogger(AbstractOption.class.getName());
+
+    private static final HashMap<String, Constructor<AbstractOption>> optionMap = new HashMap<>();
 
     /** The option group prefix. */
     private String optionGroupId = "";
@@ -79,6 +84,37 @@ public abstract class AbstractOption<T> extends FreeColSpecObject
      */
     public AbstractOption(Specification specification) {
         this(null, specification);
+    }
+
+    static {
+        Class<AbstractOption>[] classes = new Class[] {
+                AbstractUnitOption.class,
+                AudioMixerOption.class,
+                BooleanOption.class,
+                FileOption.class,
+                IntegerOption.class,
+                LanguageOption.class,
+                ModListOption.class,
+                ModOption.class,
+                OptionGroup.class,
+                PercentageOption.class,
+                RangeOption.class,
+                SelectOption.class,
+                StringOption.class,
+                UnitListOption.class,
+                UnitTypeOption.class,
+                TextOption.class
+        };
+
+        for (Class<AbstractOption> c : classes) {
+            try {
+                String tag = (String) c.getField("TAG").get(null);
+                Constructor<AbstractOption> ctor = c.getConstructor(Specification.class);
+
+                optionMap.put(tag, ctor);
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     /**
@@ -217,54 +253,18 @@ public abstract class AbstractOption<T> extends FreeColSpecObject
             // logger.finest("Skipping action " + xr.readId());
             xr.nextTag();
 
-        } else if (AbstractUnitOption.TAG.equals(tag)) {
-            option = new AbstractUnitOption(spec);
-
-        } else if (AudioMixerOption.TAG.equals(tag)) {
-            option = new AudioMixerOption(spec);
-
-        } else if (BooleanOption.TAG.equals(tag)) {
-            option = new BooleanOption(spec);
-
-        } else if (FileOption.TAG.equals(tag)) {
-            option = new FileOption(spec);
-
-        } else if (IntegerOption.TAG.equals(tag)) {
-            option = new IntegerOption(spec);
-
-        } else if (LanguageOption.TAG.equals(tag)) {
-            option = new LanguageOption(spec);
-
-        } else if (ModListOption.TAG.equals(tag)) {
-            option = new ModListOption(spec);
-
-        } else if (ModOption.TAG.equals(tag)) {
-            option = new ModOption(spec);
-
-        } else if (OptionGroup.TAG.equals(tag)) {
-            option = new OptionGroup(spec);
-
-        } else if (PercentageOption.TAG.equals(tag)) {
-            option = new PercentageOption(spec);
-
-        } else if (RangeOption.TAG.equals(tag)) {
-            option = new RangeOption(spec);
-
-        } else if (SelectOption.TAG.equals(tag)) {
-            option = new SelectOption(spec);
-
-        } else if (StringOption.TAG.equals(tag)) {
-            option = new StringOption(spec);
-
-        } else if (UnitListOption.TAG.equals(tag)) {
-            option = new UnitListOption(spec);
-
-        } else if (UnitTypeOption.TAG.equals(tag)) {
-            option = new UnitTypeOption(spec);
-
-        } else if (TextOption.TAG.equals(tag)) {
-            option = new TextOption(spec);
-
+        } else if (optionMap.containsKey(tag)) {
+            try {
+                option = optionMap.get(tag).newInstance(spec);
+            } catch (InstantiationException | IllegalAccessException ignored) {
+                // These two exceptions are impossible to occur;
+                // the constructor is checked to be public.
+            } catch (InvocationTargetException e) {
+                // This exception is thrown when the constructor
+                // itself fails. We wrap it in a RuntimeException
+                // because Java's exception handling tarnation sucks.
+                throw new RuntimeException(e.getCause());
+            }
         } else {
             logger.warning("Not an option type: " + tag);
             xr.nextTag();
